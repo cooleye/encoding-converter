@@ -1,3 +1,5 @@
+import os
+import sys
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Optional
@@ -22,6 +24,15 @@ class ErrorStrategy(Enum):
     SURROGATEESCAPE = "surrogateescape"
 
 
+def get_default_output_dir():
+    # type: () -> str
+    if getattr(sys, 'frozen', False):
+        base = os.path.dirname(sys.executable)
+    else:
+        base = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    return os.path.join(base, "导出目录")
+
+
 @dataclass
 class FileEntry:
     path: str
@@ -42,11 +53,15 @@ class ConversionConfig:
     target_encoding: str = "utf-8"
     auto_detect: bool = True
     keep_per_file_encoding: bool = False
-    create_backup: bool = True
     strip_bom: bool = False
     add_bom: bool = False
     error_strategy: ErrorStrategy = ErrorStrategy.REPLACE
     max_lines_preview: int = 200
+    output_dir: str = ""
+
+    def get_effective_output_dir(self):
+        # type: () -> str
+        return self.output_dir if self.output_dir else get_default_output_dir()
 
 
 @dataclass
@@ -55,7 +70,7 @@ class ConversionResult:
     success: bool
     source_encoding: str = ""
     target_encoding: str = ""
-    backup_path: Optional[str] = None
+    output_path: Optional[str] = None
     bytes_processed: int = 0
     error_message: Optional[str] = None
     skipped: bool = False

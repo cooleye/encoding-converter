@@ -12,11 +12,15 @@ else:
 
 SPEC_ARGS = [
     os.path.join(PROJECT_ROOT, "run.py"),
-    "--name=编码转换器",
+    "--name=EncodingConverter",
     "--windowed",
+    "--onedir",
     "--add-data=" + os.path.join(PROJECT_ROOT, "src", "ui", "resources") + path_sep + "src/ui/resources",
+    "--add-data=" + os.path.join(PROJECT_ROOT, "logo.png") + path_sep + ".",
     "--hidden-import=charset_normalizer",
-    "--hidden-import=charset_normalizer.md__mypyc",
+    "--hidden-import=PyQt5.QtCore",
+    "--hidden-import=PyQt5.QtGui",
+    "--hidden-import=PyQt5.QtWidgets",
     "--noconfirm",
     "--clean",
     "--distpath=" + os.path.join(PROJECT_ROOT, "dist"),

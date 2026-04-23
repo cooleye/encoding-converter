@@ -7,7 +7,6 @@ class AppConfig(object):
         "target_encoding": "utf-8",
         "auto_detect": True,
         "keep_per_file_encoding": False,
-        "create_backup": True,
         "strip_bom": False,
         "add_bom": False,
         "error_strategy": "replace",
@@ -15,6 +14,7 @@ class AppConfig(object):
         "window_height": 650,
         "recent_source_encodings": [],
         "recent_target_encodings": [],
+        "output_dir": "",
     }
 
     def __init__(self):

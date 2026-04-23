@@ -1,6 +1,7 @@
 import codecs
 import os
 import shutil
+from datetime import datetime
 from typing import Optional, Callable, Tuple, List
 
 from .models import ConversionConfig, ConversionResult, ErrorStrategy
@@ -19,10 +20,20 @@ class EncodingConverter(object):
         self.config = config
         self.detector = EncodingDetector()
         self._cancelled = False
+        self._session_dir = None  # type: Optional[str]
 
     def cancel(self):
         # type: () -> None
         self._cancelled = True
+
+    def get_session_dir(self):
+        # type: () -> str
+        if self._session_dir is None:
+            base_dir = self.config.get_effective_output_dir()
+            timestamp = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+            self._session_dir = os.path.join(base_dir, timestamp)
+            os.makedirs(self._session_dir, exist_ok=True)
+        return self._session_dir
 
     def convert_file(self, file_path, detected_encoding=None, progress_callback=None):
         # type: (str, Optional[str], Optional[Callable[[int], None]]) -> ConversionResult
@@ -48,44 +59,48 @@ class EncodingConverter(object):
             result.source_encoding = source_enc
 
             if self._should_skip(source_enc, file_path):
+                session_dir = self.get_session_dir()
+                output_path = self._get_output_path(file_path, session_dir)
+                os.makedirs(os.path.dirname(output_path), exist_ok=True)
+                shutil.copy2(file_path, output_path)
                 result.skipped = True
-                result.skip_reason = "Same encoding, no changes needed"
+                result.skip_reason = "Same encoding, copied to output"
                 result.success = True
+                result.output_path = output_path
                 return result
 
             if progress_callback:
                 progress_callback(10)
 
-            backup_path = None
-            if self.config.create_backup:
-                backup_path = file_path + ".bak"
-                shutil.copy2(file_path, backup_path)
-                result.backup_path = backup_path
-
             if progress_callback:
                 progress_callback(20)
 
+            session_dir = self.get_session_dir()
+            output_path = self._get_output_path(file_path, session_dir)
+            os.makedirs(os.path.dirname(output_path), exist_ok=True)
+
             file_size = os.path.getsize(file_path)
             if file_size > LARGE_FILE_THRESHOLD:
-                self._convert_large_file(file_path, source_enc, progress_callback)
+                self._convert_large_file(file_path, source_enc, output_path, progress_callback)
             else:
-                self._convert_small_file(file_path, source_enc, progress_callback)
+                self._convert_small_file(file_path, source_enc, output_path, progress_callback)
 
             if progress_callback:
                 progress_callback(100)
 
             result.success = True
             result.bytes_processed = file_size
+            result.output_path = output_path
 
         except Exception as e:
             result.error_message = str(e)
-            if result.backup_path and os.path.exists(result.backup_path):
-                try:
-                    shutil.copy2(result.backup_path, file_path)
-                except (IOError, OSError):
-                    pass
 
         return result
+
+    def _get_output_path(self, file_path, session_dir):
+        # type: (str, str) -> str
+        filename = os.path.basename(file_path)
+        return os.path.join(session_dir, filename)
 
     def _validate_file(self, file_path):
         # type: (str) -> None
@@ -95,8 +110,6 @@ class EncodingConverter(object):
             raise ValueError("Not a regular file: {}".format(file_path))
         if not os.access(file_path, os.R_OK):
             raise PermissionError("Cannot read file: {}".format(file_path))
-        if not os.access(file_path, os.W_OK):
-            raise PermissionError("Cannot write to file: {}".format(file_path))
 
         try:
             with open(file_path, 'rb') as f:
@@ -130,8 +143,8 @@ class EncodingConverter(object):
             return "utf8"
         return e
 
-    def _convert_small_file(self, file_path, source_enc, progress_callback):
-        # type: (str, str, Optional[Callable[[int], None]]) -> None
+    def _convert_small_file(self, file_path, source_enc, output_path, progress_callback):
+        # type: (str, str, str, Optional[Callable[[int], None]]) -> None
         with open(file_path, 'rb') as f:
             raw = f.read()
 
@@ -157,11 +170,11 @@ class EncodingConverter(object):
             if bom:
                 output = bom + output
 
-        temp_path = file_path + ".tmp"
+        temp_path = output_path + ".tmp"
         try:
             with open(temp_path, 'wb') as f:
                 f.write(output)
-            os.replace(temp_path, file_path)
+            os.replace(temp_path, output_path)
         except Exception:
             if os.path.exists(temp_path):
                 try:
@@ -170,11 +183,11 @@ class EncodingConverter(object):
                     pass
             raise
 
-    def _convert_large_file(self, file_path, source_enc, progress_callback):
-        # type: (str, str, Optional[Callable[[int], None]]) -> None
+    def _convert_large_file(self, file_path, source_enc, output_path, progress_callback):
+        # type: (str, str, str, Optional[Callable[[int], None]]) -> None
         target_enc = self.config.target_encoding
         file_size = os.path.getsize(file_path)
-        temp_path = file_path + ".tmp"
+        temp_path = output_path + ".tmp"
         bytes_read = 0
 
         skip_bytes = 0
@@ -229,7 +242,7 @@ class EncodingConverter(object):
                 if encoded:
                     fout.write(encoded)
 
-            os.replace(temp_path, file_path)
+            os.replace(temp_path, output_path)
         except Exception:
             if os.path.exists(temp_path):
                 try:
@@ -263,7 +276,7 @@ class EncodingConverter(object):
 
         problem_count = sum(
             1 for line in converted_lines
-            if '�' in line or '\\u' in line
+            if '\ufffd' in line or '\\u' in line
         )
 
         return (original_lines, converted_lines, problem_count)

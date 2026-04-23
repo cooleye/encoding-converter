@@ -1,10 +1,13 @@
+import os
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel,
-    QPushButton, QCheckBox, QComboBox, QGroupBox, QFormLayout
+    QPushButton, QCheckBox, QComboBox, QGroupBox, QFormLayout,
+    QLineEdit, QToolButton, QFileDialog
 )
 from PyQt5.QtCore import Qt
 
 from src.utils.config import AppConfig
+from src.core.models import get_default_output_dir
 
 
 class SettingsDialog(QDialog):
@@ -14,7 +17,7 @@ class SettingsDialog(QDialog):
         super(SettingsDialog, self).__init__(parent)
         self._app_config = app_config
         self.setWindowTitle("首选项")
-        self.setMinimumWidth(450)
+        self.setMinimumWidth(500)
         self._setup_ui()
         self._load_settings()
 
@@ -26,13 +29,33 @@ class SettingsDialog(QDialog):
         general_group = QGroupBox("常规")
         general_layout = QFormLayout(general_group)
 
-        self.backup_check = QCheckBox("转换前创建备份 (.bak)")
-        general_layout.addRow(self.backup_check)
-
         self.auto_detect_check = QCheckBox("默认自动检测源编码")
         general_layout.addRow(self.auto_detect_check)
 
         layout.addWidget(general_group)
+
+        # Output directory
+        output_group = QGroupBox("导出目录")
+        output_layout = QHBoxLayout()
+
+        self.output_dir_edit = QLineEdit()
+        self.output_dir_edit.setReadOnly(True)
+        output_layout.addWidget(self.output_dir_edit, 1)
+
+        self.browse_btn = QToolButton()
+        self.browse_btn.setText("浏览...")
+        self.browse_btn.clicked.connect(self._on_browse_output_dir)
+        output_layout.addWidget(self.browse_btn)
+
+        self.reset_dir_btn = QToolButton()
+        self.reset_dir_btn.setText("重置默认")
+        self.reset_dir_btn.clicked.connect(self._on_reset_output_dir)
+        output_layout.addWidget(self.reset_dir_btn)
+
+        output_form = QFormLayout(output_group)
+        output_form.addRow("默认导出路径:", output_layout)
+
+        layout.addWidget(output_group)
 
         # Default error strategy
         error_group = QGroupBox("默认错误处理")
@@ -79,12 +102,22 @@ class SettingsDialog(QDialog):
 
         layout.addLayout(btn_layout)
 
+    def _on_browse_output_dir(self):
+        # type: () -> None
+        current = self.output_dir_edit.text()
+        dir_path = QFileDialog.getExistingDirectory(
+            self, "选择默认导出目录", current
+        )
+        if dir_path:
+            self.output_dir_edit.setText(dir_path)
+
+    def _on_reset_output_dir(self):
+        # type: () -> None
+        default_dir = get_default_output_dir()
+        self.output_dir_edit.setText(default_dir)
+
     def _load_settings(self):
         # type: () -> None
-        self.backup_check.setChecked(
-            self._app_config.get("create_backup") is True or
-            self._app_config.get("create_backup") == "true"
-        )
         self.auto_detect_check.setChecked(
             self._app_config.get("auto_detect") is True or
             self._app_config.get("auto_detect") == "true"
@@ -103,19 +136,32 @@ class SettingsDialog(QDialog):
         if idx >= 0:
             self.error_combo.setCurrentIndex(idx)
 
+        saved_output_dir = self._app_config.get("output_dir")
+        if saved_output_dir:
+            self.output_dir_edit.setText(str(saved_output_dir))
+        else:
+            self.output_dir_edit.setText(get_default_output_dir())
+
     def _save_settings(self):
         # type: () -> None
-        self._app_config.set("create_backup", self.backup_check.isChecked())
         self._app_config.set("auto_detect", self.auto_detect_check.isChecked())
         self._app_config.set("strip_bom", self.strip_bom_check.isChecked())
         self._app_config.set("add_bom", self.add_bom_check.isChecked())
         self._app_config.set("error_strategy", self.error_combo.currentData() or "replace")
+
+        output_dir = self.output_dir_edit.text().strip()
+        default_dir = get_default_output_dir()
+        if output_dir == default_dir:
+            self._app_config.set("output_dir", "")
+        else:
+            self._app_config.set("output_dir", output_dir)
+
         self.accept()
 
     def _reset_defaults(self):
         # type: () -> None
-        self.backup_check.setChecked(True)
         self.auto_detect_check.setChecked(True)
         self.strip_bom_check.setChecked(False)
         self.add_bom_check.setChecked(False)
         self.error_combo.setCurrentIndex(0)
+        self.output_dir_edit.setText(get_default_output_dir())

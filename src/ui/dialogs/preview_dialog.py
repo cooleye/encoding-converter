@@ -3,6 +3,7 @@ from PyQt5.QtWidgets import (
     QPushButton, QPlainTextEdit, QSplitter, QWidget, QSizePolicy
 )
 from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QFont
 
 from src.core.converter import EncodingConverter
 from src.core.models import ConversionConfig, ErrorStrategy
@@ -58,7 +59,8 @@ class PreviewDialog(QDialog):
         left_layout.addWidget(left_title)
         self.original_edit = QPlainTextEdit()
         self.original_edit.setReadOnly(True)
-        self.original_edit.setFontFamily("Menlo, Consolas, monospace")
+        font = QFont("Consolas", 10)
+        self.original_edit.setFont(font)
         self.original_edit.setStyleSheet("font-size: 13px; line-height: 1.4;")
         left_layout.addWidget(self.original_edit)
         splitter.addWidget(left_widget)
@@ -72,7 +74,8 @@ class PreviewDialog(QDialog):
         right_layout.addWidget(right_title)
         self.converted_edit = QPlainTextEdit()
         self.converted_edit.setReadOnly(True)
-        self.converted_edit.setFontFamily("Menlo, Consolas, monospace")
+        font = QFont("Consolas", 10)
+        self.converted_edit.setFont(font)
         self.converted_edit.setStyleSheet("font-size: 13px; line-height: 1.4;")
         right_layout.addWidget(self.converted_edit)
         splitter.addWidget(right_widget)

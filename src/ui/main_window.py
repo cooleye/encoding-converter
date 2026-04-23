@@ -1,15 +1,18 @@
 import os
+import subprocess
+import sys
 from typing import Optional, List
 
 from PyQt5.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QCheckBox, QComboBox, QFileDialog, QSplitter,
-    QGroupBox, QMessageBox, QProgressBar, QMenu, QAction, QMenuBar
+    QGroupBox, QMessageBox, QProgressBar, QMenu, QAction, QMenuBar,
+    QLineEdit, QToolButton
 )
 from PyQt5.QtCore import Qt, QSettings
 from PyQt5.QtGui import QIcon
 
-from src.core.models import ConversionConfig, ConversionResult, FileEntry, FileStatus, ErrorStrategy
+from src.core.models import ConversionConfig, ConversionResult, FileEntry, FileStatus, ErrorStrategy, get_default_output_dir
 from src.core.worker import ConversionWorker
 from src.ui.widgets.encoding_combo import EncodingComboBox
 from src.ui.widgets.file_list_table import FileListTable, FileListToolbar
@@ -33,6 +36,7 @@ class MainWindow(QMainWindow):
         self._app_config = AppConfig()
         self._worker = None  # type: Optional[ConversionWorker]
         self._converting = False
+        self._last_session_dir = ""  # type: str
 
         self._setup_menubar()
         self._setup_central_widget()
@@ -118,13 +122,32 @@ class MainWindow(QMainWindow):
 
         main_layout.addWidget(file_group, 1)
 
+        # Output directory
+        output_group = QGroupBox("导出目录")
+        output_layout = QHBoxLayout(output_group)
+
+        self.output_dir_edit = QLineEdit()
+        self.output_dir_edit.setReadOnly(True)
+        self.output_dir_edit.setPlaceholderText("默认: 软件目录/导出目录")
+        default_dir = get_default_output_dir()
+        self.output_dir_edit.setText(self._app_config.get("output_dir") or default_dir)
+        output_layout.addWidget(self.output_dir_edit, 1)
+
+        self.browse_btn = QToolButton()
+        self.browse_btn.setText("浏览...")
+        self.browse_btn.clicked.connect(self._on_browse_output_dir)
+        output_layout.addWidget(self.browse_btn)
+
+        self.reset_dir_btn = QToolButton()
+        self.reset_dir_btn.setText("重置")
+        self.reset_dir_btn.clicked.connect(self._on_reset_output_dir)
+        output_layout.addWidget(self.reset_dir_btn)
+
+        main_layout.addWidget(output_group)
+
         # Options
         options_group = QGroupBox("选项")
         options_layout = QHBoxLayout(options_group)
-
-        self.backup_check = QCheckBox("创建备份 (.bak)")
-        self.backup_check.setChecked(True)
-        options_layout.addWidget(self.backup_check)
 
         self.strip_bom_check = QCheckBox("去除 BOM")
         options_layout.addWidget(self.strip_bom_check)
@@ -211,6 +234,22 @@ class MainWindow(QMainWindow):
         # type: () -> None
         self._app_config.restore_geometry(self)
 
+    def _on_browse_output_dir(self):
+        # type: () -> None
+        current = self.output_dir_edit.text()
+        dir_path = QFileDialog.getExistingDirectory(
+            self, "选择导出目录", current
+        )
+        if dir_path:
+            self.output_dir_edit.setText(dir_path)
+            self._app_config.set("output_dir", dir_path)
+
+    def _on_reset_output_dir(self):
+        # type: () -> None
+        default_dir = get_default_output_dir()
+        self.output_dir_edit.setText(default_dir)
+        self._app_config.set("output_dir", "")
+
     def _on_add_files(self):
         # type: () -> None
         files, _ = QFileDialog.getOpenFileNames(
@@ -270,14 +309,16 @@ class MainWindow(QMainWindow):
                 error_strategy = strat
                 break
 
+        output_dir = self.output_dir_edit.text().strip()
+
         return ConversionConfig(
             source_encoding=self.source_combo.current_encoding(),
             target_encoding=self.target_combo.current_encoding() or "utf-8",
             auto_detect=self.source_combo.is_auto_detect(),
-            create_backup=self.backup_check.isChecked(),
             strip_bom=self.strip_bom_check.isChecked(),
             add_bom=self.add_bom_check.isChecked(),
             error_strategy=error_strategy,
+            output_dir=output_dir,
         )
 
     def _on_convert(self):
@@ -345,9 +386,10 @@ class MainWindow(QMainWindow):
         self.overall_progress.setValue(completed)
         self.overall_progress.setFormat("{} / {} 个文件".format(completed, total))
 
-    def _on_all_done(self, results):
-        # type: (list) -> None
+    def _on_all_done(self, results, session_dir):
+        # type: (list, str) -> None
         self._finish_conversion()
+        self._last_session_dir = session_dir
 
         success_count = sum(1 for r in results if r.success and not r.skipped)
         skip_count = sum(1 for r in results if r.skipped)
@@ -356,10 +398,37 @@ class MainWindow(QMainWindow):
         msg = "转换完成！\n\n成功: {}\n跳过: {}\n失败: {}".format(
             success_count, skip_count, fail_count
         )
+        if session_dir:
+            msg += "\n\n导出目录: {}".format(session_dir)
+
         self.status_bar.showMessage(
             "完成 - 成功 {}, 跳过 {}, 失败 {}".format(success_count, skip_count, fail_count)
         )
-        QMessageBox.information(self, "转换完成", msg)
+
+        msg_box = QMessageBox(self)
+        msg_box.setWindowTitle("转换完成")
+        msg_box.setText(msg)
+        msg_box.setIcon(QMessageBox.Information)
+
+        if session_dir and os.path.exists(session_dir):
+            open_btn = msg_box.addButton("打开导出目录", QMessageBox.ActionRole)
+
+        msg_box.addButton(QMessageBox.Ok)
+
+        msg_box.exec_()
+
+        if session_dir and os.path.exists(session_dir):
+            if msg_box.clickedButton() == open_btn:
+                self._open_directory(session_dir)
+
+    def _open_directory(self, path):
+        # type: (str) -> None
+        if sys.platform == 'win32':
+            os.startfile(path)
+        elif sys.platform == 'darwin':
+            subprocess.Popen(['open', path])
+        else:
+            subprocess.Popen(['xdg-open', path])
 
     def _on_worker_error(self, error_msg):
         # type: (str) -> None

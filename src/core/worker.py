@@ -1,5 +1,5 @@
 from PyQt5.QtCore import QThread, pyqtSignal
-from typing import List
+from typing import List, Optional
 
 from .converter import EncodingConverter
 from .models import ConversionConfig, ConversionResult, FileEntry
@@ -9,7 +9,7 @@ class ConversionWorker(QThread):
     file_progress = pyqtSignal(int, int, str)
     file_completed = pyqtSignal(int, object)
     overall_progress = pyqtSignal(int, int)
-    all_done = pyqtSignal(list)
+    all_done = pyqtSignal(list, str)
     error = pyqtSignal(str)
 
     def __init__(self, config, file_entries, parent=None):
@@ -59,7 +59,8 @@ class ConversionWorker(QThread):
             self.overall_progress.emit(i + 1, total)
 
         if not self._cancelled:
-            self.all_done.emit(results)
+            session_dir = self.converter.get_session_dir() if self.converter._session_dir else ""
+            self.all_done.emit(results, session_dir)
 
     def cancel(self):
         # type: () -> None
