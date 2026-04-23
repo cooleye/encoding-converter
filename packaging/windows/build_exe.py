@@ -14,7 +14,7 @@ SPEC_ARGS = [
     os.path.join(PROJECT_ROOT, "run.py"),
     "--name=EncodingConverter",
     "--windowed",
-    "--onedir",
+    "--onefile",
     "--add-data=" + os.path.join(PROJECT_ROOT, "src", "ui", "resources") + path_sep + "src/ui/resources",
     "--add-data=" + os.path.join(PROJECT_ROOT, "logo.png") + path_sep + ".",
     "--hidden-import=charset_normalizer",
