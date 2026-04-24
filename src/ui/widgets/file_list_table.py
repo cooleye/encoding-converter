@@ -13,6 +13,43 @@ from src.core.detector import EncodingDetector
 from src.core.bom_handler import has_bom
 from src.ui.widgets.progress_delegate import ProgressDelegate
 
+BINARY_EXTENSIONS = frozenset({
+    '.exe', '.dll', '.so', '.dylib', '.ocx', '.sys', '.drv',
+    '.zip', '.rar', '.7z', '.tar', '.gz', '.bz2', '.xz', '.zst', '.cab',
+    '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.ico', '.tif', '.tiff', '.webp', '.heic', '.raw',
+    '.mp3', '.mp4', '.avi', '.mkv', '.mov', '.wmv', '.flv', '.wav', '.flac', '.aac', '.ogg', '.wma',
+    '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.odt', '.ods', '.odp',
+    '.db', '.sqlite', '.mdb', '.dbf',
+    '.class', '.o', '.obj', '.lib', '.a', '.la',
+    '.pyc', '.pyd', '.pyo', '.so',
+    '.woff', '.woff2', '.ttf', '.otf', '.eot',
+    '.bin', '.dat', '.iso', '.img', '.dmg', '.pkg', '.deb', '.rpm', '.msi',
+    '.jar', '.war', '.ear', '.apk', '.ipa',
+    '.node', '.wasm',
+})
+
+MAX_BINARY_CHECK_SIZE = 512 * 1024
+
+
+def _is_likely_text_file(file_path):
+    # type: (str) -> bool
+    _, ext = os.path.splitext(file_path)
+    ext = ext.lower()
+    if ext in BINARY_EXTENSIONS:
+        return False
+    try:
+        file_size = os.path.getsize(file_path)
+        if file_size == 0:
+            return True
+        check_size = min(file_size, MAX_BINARY_CHECK_SIZE)
+        with open(file_path, 'rb') as f:
+            chunk = f.read(check_size)
+        if b'\x00' in chunk:
+            return False
+        return True
+    except (OSError, IOError):
+        return False
+
 
 class FileListTable(QTableWidget):
     file_added = pyqtSignal(str)
@@ -121,12 +158,13 @@ class FileListTable(QTableWidget):
         for url in event.mimeData().urls():
             path = url.toLocalFile()
             if os.path.isfile(path):
-                paths.append(path)
+                if _is_likely_text_file(path):
+                    paths.append(path)
             elif os.path.isdir(path):
                 for root, dirs, files in os.walk(path):
                     for fname in files:
                         fpath = os.path.join(root, fname)
-                        if os.path.isfile(fpath):
+                        if os.path.isfile(fpath) and _is_likely_text_file(fpath):
                             paths.append(fpath)
         for p in paths:
             self.add_file(p)
@@ -137,6 +175,9 @@ class FileListTable(QTableWidget):
         for entry in self._file_entries:
             if entry.path == file_path:
                 return
+
+        if not _is_likely_text_file(file_path):
+            return
 
         try:
             file_size = os.path.getsize(file_path)

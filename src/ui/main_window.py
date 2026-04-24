@@ -254,7 +254,7 @@ class MainWindow(QMainWindow):
         # type: () -> None
         files, _ = QFileDialog.getOpenFileNames(
             self, "添加文件", "",
-            "文本文件 (*.txt *.csv *.log *.xml *.json *.html *.htm *.py *.js *.css *.md *.ini *.cfg *.yml *.yaml *.properties);;所有文件 (*)")
+            "文本文件 (*.txt *.csv *.log *.xml *.json *.html *.htm *.py *.js *.css *.md *.ini *.cfg *.yml *.yaml *.properties *.nc *.c *.cpp *.h *.hpp *.java *.rb *.php *.go *.rs *.ts *.tsx *.jsx *.vue *.sql *.sh *.bat *.ps1 *.dockerfile *.makefile *.cmake *.toml *.conf *.env *.gitignore *.editorconfig *.srt *.vtt *.ass *.sub *.rst *.tex *.bib *.lhs *.hs *.ml *.lisp *.clj *.scala *.kt *.swift *.dart *.lua *.pl *.r *.m *.mm *.asm *.s *.v *.vhd *.tcl *.proto *.gradle *.cs *.vb *.fs *.xaml *.resx *.plist *.svg *.xhtml *.jsp *.asp *.aspx);;所有文件 (*)")
         if files:
             self.file_table.add_files(files)
 
